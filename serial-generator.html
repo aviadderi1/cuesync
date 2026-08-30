@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Serial Generator — Cue Sync</title>
+<style>
+  :root{
+    --bg:#0d1015; --panel:#171b21; --line:#242a33; --text:#ece9e2; --muted:#8891a0;
+    --cyan:#45d6c0; --amber:#f2a94e; --green:#3ecf5e;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;}
+  .wrap{padding:24px;}
+  h1{font-size:14px;margin:0 0 2px;font-weight:800;}
+  .sub{font-size:11px;color:var(--muted);margin-bottom:20px;}
+  .field-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;margin-top:16px;}
+  textarea, input{
+    width:100%;background:var(--panel);border:1px solid var(--line);border-radius:8px;
+    color:var(--text);font-family:'JetBrains Mono',monospace;font-size:13px;
+    padding:10px 12px;letter-spacing:.5px;
+  }
+  textarea:focus, input:focus{outline:none;border-color:var(--cyan);}
+  .gen-btn{
+    width:100%;background:linear-gradient(#3ecf5e,#2a9e46);border:none;color:#0a2a12;
+    font-weight:800;font-size:12px;border-radius:8px;padding:10px;cursor:pointer;margin-top:16px;
+  }
+  .gen-btn:hover{filter:brightness(1.08);}
+  .result-box{
+    display:none;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--green);
+    border-radius:8px;padding:10px 12px;margin-top:14px;
+  }
+  .result-box code{flex:1;font-size:13px;color:var(--green);letter-spacing:.5px;}
+  .copy-btn{
+    background:#242a33;border:1px solid var(--line);color:var(--text);border-radius:6px;
+    padding:5px 10px;font-size:11px;cursor:pointer;flex-shrink:0;
+  }
+  .this-machine{font-size:10.5px;color:var(--muted);margin-top:22px;line-height:1.6;}
+  .this-machine code{color:var(--amber);}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>🔑 Serial Generator</h1>
+    <div class="sub">Internal tool — mint an activation serial for a customer's Machine ID.</div>
+
+    <div class="field-label">Customer's Machine ID</div>
+    <input type="text" id="machineIdInput" placeholder="e.g. A1B2-C3D4-E5F6-0718" autocomplete="off" spellcheck="false">
+
+    <button class="gen-btn" id="genBtn">Generate Serial</button>
+
+    <div class="result-box" id="resultBox">
+      <code id="resultSerial"></code>
+      <button class="copy-btn" id="copyResultBtn">Copy</button>
+    </div>
+
+    <div class="this-machine">
+      This computer's own Machine ID: <code id="ownMachineId">…</code>
+    </div>
+  </div>
+<script>
+  window.serialGenAPI.getOwnMachineId().then(id=>{
+    document.getElementById('ownMachineId').textContent = id;
+  });
+  document.getElementById('genBtn').addEventListener('click', async ()=>{
+    const input = document.getElementById('machineIdInput').value.trim();
+    if(!input) return;
+    const serial = await window.serialGenAPI.generate(input);
+    document.getElementById('resultSerial').textContent = serial;
+    document.getElementById('resultBox').style.display = 'flex';
+  });
+  document.getElementById('copyResultBtn').addEventListener('click', ()=>{
+    navigator.clipboard.writeText(document.getElementById('resultSerial').textContent);
+    const btn = document.getElementById('copyResultBtn');
+    const orig = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(()=> btn.textContent = orig, 1200);
+  });
+  document.getElementById('machineIdInput').addEventListener('keydown', (e)=>{
+    if(e.key==='Enter') document.getElementById('genBtn').click();
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Preferences — Cue Sync</title>
+<style>
+  :root{
+    --bg:#12151a; --panel:#171b21; --line:#242a33; --text:#ece9e2;
+    --muted:#8891a0; --cyan:#45d6c0; --cyan-dim:#1f4a44;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;}
+  .wrap{padding:20px;}
+  h1{font-size:14px;margin:0 0 18px;font-weight:700;letter-spacing:.3px;}
+  .field{margin-bottom:16px;}
+  label{display:block;font-size:11px;color:var(--muted);margin-bottom:6px;letter-spacing:.4px;text-transform:uppercase;}
+  select{
+    width:100%;background:var(--panel);border:1px solid var(--line);color:var(--text);
+    padding:8px 10px;border-radius:6px;font-size:12.5px;font-family:'JetBrains Mono',monospace;
+  }
+  .status{font-size:10.5px;color:var(--muted);margin-top:20px;line-height:1.6;}
+  .pwd-section{margin-top:24px;padding-top:18px;border-top:1px solid var(--line);}
+  .pwd-badge{
+    display:inline-flex;align-items:center;gap:5px;font-size:10.5px;
+    padding:3px 9px;border-radius:20px;margin-bottom:14px;font-family:'JetBrains Mono',monospace;
+  }
+  .pwd-badge.on{color:#5ec98a;background:rgba(94,201,138,.1);border:1px solid rgba(94,201,138,.3);}
+  .pwd-badge.off{color:var(--muted);background:rgba(136,145,160,.08);border:1px solid var(--line);}
+  input[type=password]{
+    width:100%;background:var(--panel);border:1px solid var(--line);color:var(--text);
+    padding:8px 10px;border-radius:6px;font-size:12.5px;font-family:'JetBrains Mono',monospace;
+    box-sizing:border-box;
+  }
+  input[type=password]:focus{outline:none;border-color:var(--cyan-dim);}
+  .pwd-btn-row{display:flex;gap:8px;margin-top:4px;}
+  .pwd-btn{
+    flex:1;text-align:center;padding:8px;border-radius:6px;border:1px solid var(--line);
+    background:var(--panel);font-size:11px;color:var(--text);cursor:pointer;font-family:'JetBrains Mono',monospace;
+  }
+  .pwd-btn-save{border-color:var(--cyan-dim);color:var(--cyan);}
+  .pwd-btn-clear{color:#e05c5c;}
+  .pwd-msg{font-size:10.5px;min-height:14px;margin-top:8px;}
+  .pwd-msg.err{color:#ff6b6b;}
+  .pwd-msg.ok{color:#5ec98a;}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Preferences</h1>
+    <div class="field">
+      <label>MIDI Output (to grandMA)</label>
+      <select id="midiOutSelect"><option value="">— Select MIDI Output —</option></select>
+    </div>
+    <div class="field">
+      <label>MIDI Input (from grandMA)</label>
+      <select id="midiInSelect"><option value="">— Select MIDI Input —</option></select>
+    </div>
+    <div class="field">
+      <label>Audio Output (sound card)</label>
+      <select id="audioOutSelect"><option value="">— Select Audio Output —</option></select>
+    </div>
+    <div class="status">Changes apply immediately to the main window.</div>
+
+    <div class="pwd-section">
+      <label>Button Password Protection</label>
+      <div class="pwd-badge" id="pwdBadge"></div>
+      <div class="field">
+        <input type="password" id="pwdNewInput" placeholder="New password">
+      </div>
+      <div class="field">
+        <input type="password" id="pwdConfirmInput" placeholder="Confirm password">
+      </div>
+      <div class="pwd-btn-row">
+        <div class="pwd-btn pwd-btn-save" id="pwdSaveBtn">Save Password</div>
+        <div class="pwd-btn pwd-btn-clear" id="pwdClearBtn">Remove Protection</div>
+      </div>
+      <div class="pwd-msg" id="pwdMsg"></div>
+      <div class="status">When set, "PLAY ALL", the Cue Lock button, and the AMO (disconnect MIDI) button on the main screen will all ask for this password every time they're clicked.</div>
+    </div>
+  </div>
+<script>
+  async function load(){
+    const lists = await window.prefsAPI.requestDeviceLists();
+    if(!lists) return;
+    fill('midiOutSelect', lists.midiOutputs, lists.selectedMidiOut, '— Select MIDI Output —');
+    fill('midiInSelect', lists.midiInputs, lists.selectedMidiIn, '— Select MIDI Input —');
+    fill('audioOutSelect', lists.audioOutputs, lists.selectedAudioOut, '— Select Audio Output —');
+  }
+  function fill(selectId, items, selectedId, placeholder){
+    const sel = document.getElementById(selectId);
+    sel.innerHTML = '<option value="">'+placeholder+'</option>';
+    (items||[]).forEach(it=>{
+      const opt = document.createElement('option');
+      opt.value = it.id; opt.textContent = it.name || it.id;
+      sel.appendChild(opt);
+    });
+    sel.value = selectedId || '';
+  }
+  document.getElementById('midiOutSelect').addEventListener('change', (e)=>{
+    window.prefsAPI.setDevice('midiOut', e.target.value);
+  });
+  document.getElementById('midiInSelect').addEventListener('change', (e)=>{
+    window.prefsAPI.setDevice('midiIn', e.target.value);
+  });
+  document.getElementById('audioOutSelect').addEventListener('change', (e)=>{
+    window.prefsAPI.setDevice('audioOut', e.target.value);
+  });
+  load();
+
+  async function loadPasswordStatus(){
+    const status = await window.prefsAPI.requestPasswordStatus();
+    const badge = document.getElementById('pwdBadge');
+    if(status && status.hasPassword){
+      badge.textContent = '🔒 Protection is ON';
+      badge.className = 'pwd-badge on';
+    } else {
+      badge.textContent = '🔓 Protection is OFF';
+      badge.className = 'pwd-badge off';
+    }
+  }
+  function showPwdMsg(text, ok){
+    const msg = document.getElementById('pwdMsg');
+    msg.textContent = text;
+    msg.className = 'pwd-msg ' + (ok ? 'ok' : 'err');
+  }
+  document.getElementById('pwdSaveBtn').addEventListener('click', ()=>{
+    const p1 = document.getElementById('pwdNewInput').value;
+    const p2 = document.getElementById('pwdConfirmInput').value;
+    if(!p1){ showPwdMsg('Enter a password first.', false); return; }
+    if(p1 !== p2){ showPwdMsg('Passwords do not match.', false); return; }
+    window.prefsAPI.setPassword(p1);
+    document.getElementById('pwdNewInput').value = '';
+    document.getElementById('pwdConfirmInput').value = '';
+    showPwdMsg('Password saved.', true);
+    loadPasswordStatus();
+  });
+  document.getElementById('pwdClearBtn').addEventListener('click', ()=>{
+    window.prefsAPI.clearPassword();
+    document.getElementById('pwdNewInput').value = '';
+    document.getElementById('pwdConfirmInput').value = '';
+    showPwdMsg('Password protection removed.', true);
+    loadPasswordStatus();
+  });
+  loadPasswordStatus();
+</script>
+</body>
+</html>
