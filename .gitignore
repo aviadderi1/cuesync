@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+out/
+*.exe
+*.dmg
+*.zip
+*.blockmap
+
+# Licence / activation artefacts (never commit these)
+activation.dat
+license.json
+
+# Logs & temp
+*.log
+npm-debug.log*
+.cache/
+tmp/
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Licence secret — never commit (see license-secret.example.js)
+license-secret.js

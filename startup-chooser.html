@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Orbitron:wght@400;700;800&display=swap" rel="stylesheet">
+<title>Cue Sync</title>
+<style>
+  :root{
+    --bg:#12151a; --panel:#171b21; --line:#242a33; --text:#ece9e2; --muted:#8891a0; --cyan:#00f2ff;
+  }
+  *{box-sizing:border-box;-webkit-user-select:none;user-select:none;}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;overflow:hidden;}
+  .wrap{padding:44px 32px 40px;text-align:center;}
+
+  .neon-title{
+    font-size:30px;font-weight:800;letter-spacing:1.2px;margin:0;
+    font-family:'Orbitron',sans-serif;color:var(--cyan);
+    text-shadow:0 0 20px rgba(0,242,255,.65);
+  }
+  .neon-sub{
+    margin-top:8px;text-align:center;
+    font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:800;letter-spacing:4px;
+    color:#a3841f;
+    text-shadow:0 1px 0 rgba(255,225,140,.4), 0 -1.5px 1.5px rgba(0,0,0,.9);
+    display:flex;align-items:center;justify-content:center;gap:8px;
+  }
+  .neon-ma-box{
+    display:inline-flex;align-items:center;justify-content:center;
+    background:#000;border-radius:4px;padding:1px 7px;
+    box-shadow:inset 0 1px 2px rgba(0,0,0,.9), 0 1px 0 rgba(255,255,255,.05);
+    letter-spacing:2px;
+  }
+
+  .row{display:flex;gap:12px;margin-top:36px;}
+  .btn{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px 14px;cursor:pointer;}
+  .btn:hover{border-color:var(--cyan);}
+  .btn:active{filter:brightness(1.15);}
+  .icon{font-size:24px;margin-bottom:10px;}
+  .label{font-size:13px;font-weight:700;}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="neon-title">Cue Sync</div>
+    <div class="neon-sub">FOR GRAND <span class="neon-ma-box">MA</span></div>
+
+    <div class="row">
+      <div class="btn" id="newProjectBtn"><div class="icon">＋</div><div class="label">New Project</div></div>
+      <div class="btn" id="openProjectBtn"><div class="icon">📂</div><div class="label">Open Project</div></div>
+      <div class="btn" id="openRecentBtn"><div class="icon">🕒</div><div class="label">Open Recent</div></div>
+    </div>
+  </div>
+<script>
+  document.getElementById('newProjectBtn').addEventListener('click', ()=> window.startupAPI.chooseNewProject());
+  document.getElementById('openProjectBtn').addEventListener('click', ()=> window.startupAPI.chooseOpenProject());
+  document.getElementById('openRecentBtn').addEventListener('click', ()=> window.startupAPI.chooseOpenRecent());
+</script>
+</body>
+</html>

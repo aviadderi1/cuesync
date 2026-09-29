@@ -1,0 +1,78 @@
+{
+  "name": "cue-sync",
+  "version": "1.1.0",
+  "description": "Cue Sync - stage playback and MIDI Show Control cue tool",
+  "main": "main.js",
+  "author": "Aviad",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "build": {
+    "appId": "com.cuesync.app",
+    "productName": "Cue Sync",
+    "asar": false,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "preferences-preload.js",
+      "preferences.html",
+      "remote-info-preload.js",
+      "remote-info.html",
+      "about-preload.js",
+      "about.html",
+      "splash.html",
+      "splash-logo.png",
+      "updater.js",
+      "remote.js",
+      "index.html",
+      "icon.png",
+      "version.txt",
+      "keycommands.html",
+      "keycommands-preload.js",
+      "license.js",
+      "license-secret.js",
+      "license-gate.html",
+      "license-gate-preload.js",
+      "serial-generator.html",
+      "serial-generator-preload.js",
+      "startup-chooser.html",
+      "startup-chooser-preload.js",
+      "Cue_Sync_User_Manual.pdf",
+      "icon.ico",
+      "icon.icns"
+    ],
+    "icon": "icon.png",
+    "win": {
+      "target": "nsis",
+      "icon": "icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Cue Sync",
+      "deleteAppDataOnUninstall": true,
+      "include": "installer.nsh"
+    },
+    "mac": {
+      "target": "zip",
+      "icon": "icon.png",
+      "category": "public.app-category.music"
+    }
+  }
+}

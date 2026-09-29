@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Key Commands — Cue Sync</title>
+<style>
+  :root{
+    --bg:#12151a; --panel:#171b21; --panel-2:#1c2027; --line:#242a33; --text:#ece9e2;
+    --muted:#8891a0; --cyan:#45d6c0; --cyan-dim:#1f4a44; --amber:#ff8c00;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;}
+  .wrap{padding:16px 18px;height:100%;display:flex;flex-direction:column;}
+  h1{font-size:14px;margin:0 0 4px;font-weight:700;letter-spacing:.3px;}
+  .sub{font-size:10.5px;color:var(--muted);margin-bottom:14px;line-height:1.5;}
+  .list{flex:1;overflow-y:auto;border-top:1px solid var(--line);}
+  .section-head{
+    font-size:9.5px;color:var(--amber);text-transform:uppercase;letter-spacing:.8px;
+    padding:12px 2px 6px;font-weight:700;
+  }
+  .row{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    padding:8px 2px;border-bottom:1px solid var(--line);
+  }
+  .row-label{font-size:12px;color:var(--text);}
+  .row-actions{display:flex;align-items:center;gap:6px;flex-shrink:0;}
+  .key-btn{
+    min-width:78px;text-align:center;background:var(--panel-2);border:1px solid var(--line);
+    color:var(--cyan);padding:5px 10px;border-radius:6px;font-size:11px;
+    font-family:'JetBrains Mono',monospace;cursor:pointer;letter-spacing:.3px;
+  }
+  .key-btn:hover{border-color:var(--cyan-dim);}
+  .key-btn.recording{background:rgba(255,140,0,.14);border-color:var(--amber);color:var(--amber);animation:pulse 1s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.5;}}
+  .reset-btn{
+    background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;
+    padding:4px 6px;border-radius:5px;line-height:1;
+  }
+  .reset-btn:hover{color:var(--text);background:var(--panel-2);}
+  .status{font-size:10.5px;color:var(--muted);margin-top:12px;line-height:1.6;flex-shrink:0;}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Key Commands</h1>
+    <div class="sub">Click a key field, then press the new key you want. Changes apply immediately.</div>
+    <div class="list" id="list"></div>
+    <div class="status">Changes apply immediately to the main window.</div>
+  </div>
+<script>
+  let commands = [];
+  let bindings = {};
+  let recordingId = null;
+
+  function fmtKey(k){
+    if(!k) return '—';
+    if(k === ' ') return 'Space';
+    return k.length===1 ? k.toUpperCase() : k;
+  }
+
+  function sectionFor(id){
+    return id.startsWith('es') ? 'Edit Screen' : 'Main App';
+  }
+
+  function render(){
+    const list = document.getElementById('list');
+    list.innerHTML = '';
+    let lastSection = null;
+    commands.forEach(cmd=>{
+      const section = sectionFor(cmd.id);
+      if(section !== lastSection){
+        const head = document.createElement('div');
+        head.className = 'section-head';
+        head.textContent = section;
+        list.appendChild(head);
+        lastSection = section;
+      }
+      const row = document.createElement('div');
+      row.className = 'row';
+      const label = document.createElement('div');
+      label.className = 'row-label';
+      label.textContent = cmd.label.replace(/^Edit Screen:\s*/, '');
+      const actions = document.createElement('div');
+      actions.className = 'row-actions';
+      const keyBtn = document.createElement('button');
+      keyBtn.className = 'key-btn' + (recordingId===cmd.id ? ' recording' : '');
+      keyBtn.textContent = recordingId===cmd.id ? 'Press a key…' : (cmd.requiresCtrl ? 'Ctrl+' : '') + fmtKey(bindings[cmd.id]);
+      keyBtn.addEventListener('click', ()=> startRecording(cmd.id));
+      const resetBtn = document.createElement('button');
+      resetBtn.className = 'reset-btn';
+      resetBtn.title = 'Reset to default';
+      resetBtn.textContent = '⟲';
+      resetBtn.addEventListener('click', ()=>{
+        window.keyCmdAPI.resetBinding(cmd.id);
+        bindings[cmd.id] = cmd.defaultKey;
+        render();
+      });
+      actions.appendChild(keyBtn);
+      actions.appendChild(resetBtn);
+      row.appendChild(label);
+      row.appendChild(actions);
+      list.appendChild(row);
+    });
+  }
+
+  function startRecording(id){
+    recordingId = id;
+    render();
+  }
+
+  document.addEventListener('keydown', (e)=>{
+    if(!recordingId) return;
+    e.preventDefault();
+    let key = e.key;
+    if(key === 'Escape'){ recordingId = null; render(); return; }
+    if(key === ' ') key = 'Space';
+    window.keyCmdAPI.setBinding(recordingId, key);
+    bindings[recordingId] = key;
+    recordingId = null;
+    render();
+  });
+
+  async function load(){
+    const data = await window.keyCmdAPI.requestBindings();
+    if(!data) return;
+    commands = data.commands || [];
+    bindings = {};
+    (data.bindings || []).forEach(b=>{ bindings[b.id] = b.key; });
+    render();
+  }
+  load();
+</script>
+</body>
+</html>

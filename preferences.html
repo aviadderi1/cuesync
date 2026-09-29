@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Preferences — Cue Sync</title>
+<style>
+  :root{
+    --bg:#12151a; --panel:#171b21; --line:#242a33; --text:#ece9e2;
+    --muted:#8891a0; --cyan:#45d6c0; --cyan-dim:#1f4a44;
+    --sidebar:#0e1116;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;overflow:hidden;}
+  .window{display:flex;flex-direction:column;height:100vh;}
+  .body{display:flex;flex:1;min-height:0;}
+
+  .sidebar{width:170px;flex-shrink:0;background:var(--sidebar);border-right:1px solid var(--line);
+    padding:14px 0;overflow-y:auto;}
+  .sidebar-title{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;
+    padding:0 16px 10px;}
+  .cat{
+    display:flex;align-items:center;gap:10px;padding:10px 16px;font-size:13px;font-weight:600;
+    color:var(--muted);cursor:pointer;border-left:3px solid transparent;user-select:none;
+  }
+  .cat:hover{color:var(--text);background:rgba(255,255,255,.03);}
+  .cat.active{color:var(--cyan);background:var(--cyan-dim);border-left-color:var(--cyan);}
+  .cat .icon{font-size:15px;width:18px;text-align:center;}
+
+  .content{flex:1;padding:26px 30px;overflow-y:auto;}
+  .panel{display:none;}
+  .panel.active{display:block;}
+  .content h1{font-size:16px;margin:0 0 4px;font-weight:700;}
+  .content .subtitle{font-size:11.5px;color:var(--muted);margin:0 0 22px;}
+  .content .section-head{
+    font-size:12px;font-weight:800;letter-spacing:1.2px;color:#45d6c0;
+    margin:0 0 4px;
+  }
+  .content .section-sub{font-size:11.5px;color:var(--muted);margin:0 0 12px;}
+  .field{margin-bottom:18px;max-width:420px;}
+  label{display:block;font-size:11px;color:var(--muted);margin-bottom:6px;letter-spacing:.4px;text-transform:uppercase;}
+  select{
+    width:100%;background:var(--panel);border:1px solid var(--line);color:var(--text);
+    padding:9px 10px;border-radius:6px;font-size:12.5px;font-family:'JetBrains Mono',monospace;
+  }
+  .status{font-size:10.5px;color:var(--muted);margin-top:14px;line-height:1.6;max-width:420px;}
+
+  .rso-options{display:flex;flex-direction:column;gap:10px;max-width:420px;}
+  .rso-opt{
+    display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border-radius:8px;
+    border:1px solid var(--line);background:var(--panel);cursor:pointer;
+  }
+  .rso-opt.selected{border-color:var(--cyan);background:var(--cyan-dim);}
+  .rso-radio{width:16px;height:16px;border-radius:50%;border:2px solid var(--muted);flex-shrink:0;margin-top:2px;position:relative;}
+  .rso-opt.selected .rso-radio{border-color:var(--cyan);}
+  .rso-opt.selected .rso-radio::after{content:'';position:absolute;inset:2px;border-radius:50%;background:var(--cyan);}
+  .rso-opt-title{font-size:13px;font-weight:700;margin-bottom:3px;}
+  .rso-opt.selected .rso-opt-title{color:var(--cyan);}
+  .rso-opt-desc{font-size:11px;color:var(--muted);line-height:1.5;}
+
+  .pwd-badge{
+    display:inline-flex;align-items:center;gap:5px;font-size:10.5px;
+    padding:3px 9px;border-radius:20px;margin-bottom:14px;font-family:'JetBrains Mono',monospace;
+  }
+  .pwd-badge.on{color:#5ec98a;background:rgba(94,201,138,.1);border:1px solid rgba(94,201,138,.3);}
+  .pwd-badge.off{color:var(--muted);background:rgba(136,145,160,.08);border:1px solid var(--line);}
+  input[type=password]{
+    width:100%;background:var(--panel);border:1px solid var(--line);color:var(--text);
+    padding:9px 10px;border-radius:6px;font-size:12.5px;font-family:'JetBrains Mono',monospace;
+    box-sizing:border-box;
+  }
+  input[type=password]:focus{outline:none;border-color:var(--cyan-dim);}
+  .pwd-btn-row{display:flex;gap:8px;margin-top:4px;max-width:420px;}
+  .pwd-btn{
+    flex:1;text-align:center;padding:9px;border-radius:6px;border:1px solid var(--line);
+    background:var(--panel);font-size:11px;color:var(--text);cursor:pointer;font-family:'JetBrains Mono',monospace;
+  }
+  .pwd-btn-save{border-color:var(--cyan-dim);color:var(--cyan);}
+  .pwd-btn-clear{color:#e05c5c;}
+  .pwd-msg{font-size:10.5px;min-height:14px;margin-top:8px;}
+  .pwd-msg.err{color:#ff6b6b;}
+  .pwd-msg.ok{color:#5ec98a;}
+
+  .screens{display:flex;gap:12px;margin-top:6px;flex-wrap:wrap;}
+  .screen-card{
+    /* narrow enough that both monitors sit side by side in this panel */
+    width:170px;border:1px solid #2c333f;border-radius:8px;background:#151922;
+    padding:10px 8px 8px;cursor:pointer;text-align:center;transition:border-color .15s,background .15s;
+  }
+  .screen-card:hover{background:#1a1f29;}
+  .screen-card.selected{border-color:#2ec4a6;background:#16241f;}
+  .screen-card.missing{opacity:.45;cursor:default;}
+  .screen-card.missing:hover{background:#151922;}
+  .mon{width:100%;height:74px;display:block;}
+  .screen-name{font-size:11.5px;font-weight:800;color:#d7dbe2;margin-top:8px;}
+  .screen-meta{font-size:10px;color:#79818f;font-family:'JetBrains Mono',monospace;margin-top:2px;}
+  .screen-badge{display:inline-block;margin-top:6px;font-size:8.5px;font-weight:800;letter-spacing:.6px;
+    padding:2px 7px;border-radius:3px;background:#1d2630;color:#7f8b9b;}
+  .screen-card.selected .screen-badge{background:#1d4034;color:#5fe3c0;}
+  .prefs-version{
+    margin-right:auto;font-family:'JetBrains Mono',monospace;font-size:10px;color:#5f6773;user-select:text;
+  }
+  .footer{
+    display:flex;justify-content:flex-end;align-items:center;gap:10px;
+    padding:14px 24px;border-top:1px solid var(--line);background:var(--sidebar);flex-shrink:0;
+  }
+  .save-btn{
+    background:linear-gradient(180deg,#3fd6b8,#26a88f);color:#08201b;font-weight:800;
+    border:none;padding:10px 28px;border-radius:7px;font-size:13px;cursor:pointer;letter-spacing:.3px;
+  }
+  .save-btn:hover{filter:brightness(1.06);}
+</style>
+</head>
+<body>
+  <div class="window">
+    <div class="body">
+      <div class="sidebar">
+        <div class="sidebar-title">Settings</div>
+        <div class="cat active" data-panel="midi"><span class="icon">🎹</span> MIDI</div>
+        <div class="cat" data-panel="audio"><span class="icon">🔊</span> AUDIO</div>
+        <div class="cat" data-panel="rso"><span class="icon">↔️</span> RSO</div>
+        <div class="cat" data-panel="general"><span class="icon">🔒</span> GENERAL</div>
+        <div class="cat" data-panel="timecode"><span class="icon">⏱</span> TIMECODE</div>
+        <div class="cat" data-panel="video"><span class="icon">🖥</span> VIDEO</div>
+      </div>
+
+      <div class="content">
+        <div class="panel active" id="panel-midi">
+          <h1>MIDI</h1>
+          <div class="subtitle">Configure the connection to your grandMA console.</div>
+          <div class="field">
+            <label>MIDI Output (to grandMA)</label>
+            <select id="midiOutSelect"><option value="">— Select MIDI Output —</option></select>
+          </div>
+          <div class="field">
+            <label>MIDI Input (from grandMA)</label>
+            <select id="midiInSelect"><option value="">— Select MIDI Input —</option></select>
+          </div>
+          <div class="status">Changes here take effect once you click Save below.</div>
+        </div>
+
+        <div class="panel" id="panel-audio">
+          <h1>Audio</h1>
+          <div class="subtitle">Choose which sound card plays the show's audio.</div>
+          <div class="field">
+            <label>Audio Output (sound card)</label>
+            <select id="audioOutSelect"><option value="">— Select Audio Output —</option></select>
+          </div>
+          <div class="status">Changes here take effect once you click Save below.</div>
+        </div>
+
+        <div class="panel" id="panel-rso">
+          <h1>RSO — Resync on Seek</h1>
+          <div class="subtitle">Controls whether seeking within a song resends a MIDI GO command.</div>
+          <div class="rso-options" id="rsoOptions">
+            <div class="rso-opt" data-mode="off">
+              <div class="rso-radio"></div>
+              <div>
+                <div class="rso-opt-title">RSO OFF</div>
+                <div class="rso-opt-desc">Seeking between cues never sends a GO command to the console.</div>
+              </div>
+            </div>
+            <div class="rso-opt" data-mode="onlyPlay">
+              <div class="rso-radio"></div>
+              <div>
+                <div class="rso-opt-title">ONLY PLAY</div>
+                <div class="rso-opt-desc">Seeking between cues sends a GO command only while the song is playing.</div>
+              </div>
+            </div>
+            <div class="rso-opt" data-mode="onlyStop">
+              <div class="rso-radio"></div>
+              <div>
+                <div class="rso-opt-title">ONLY STOP</div>
+                <div class="rso-opt-desc">Seeking between cues sends a GO command only while no song is playing.</div>
+              </div>
+            </div>
+          </div>
+          <div class="status">Changes here take effect once you click Save below.</div>
+        </div>
+
+        <div class="panel" id="panel-video">
+          <h1>Video</h1>
+          <div class="subtitle">Choose the display that video channels are projected on.</div>
+          <div class="section-head">OUTPUT DISPLAY</div>
+          <div class="section-sub">Select the screen the audience sees. Video plays there full screen.</div>
+          <div class="screens" id="videoScreens"></div>
+          <div class="section-head" style="margin-top:18px;">OUTPUT RESOLUTION</div>
+          <div class="section-sub">The size the video is rendered at on that display.</div>
+          <div class="rso-options" id="videoResOptions">
+            <div class="rso-opt" data-res="native"><div class="rso-radio"></div><div><div class="rso-opt-title">MATCH DISPLAY</div><div class="rso-opt-desc">Fills the display at its own resolution. Recommended.</div></div></div>
+            <div class="rso-opt" data-res="2160p"><div class="rso-radio"></div><div><div class="rso-opt-title">3840 × 2160 (4K)</div><div class="rso-opt-desc">Renders at 4K, scaled to fit the display.</div></div></div>
+            <div class="rso-opt" data-res="1080p"><div class="rso-radio"></div><div><div class="rso-opt-title">1920 × 1080 (Full HD)</div><div class="rso-opt-desc">Renders at 1080p, scaled to fit the display.</div></div></div>
+            <div class="rso-opt" data-res="720p"><div class="rso-radio"></div><div><div class="rso-opt-title">1280 × 720 (HD)</div><div class="rso-opt-desc">Lighter on the computer, for long shows or older machines.</div></div></div>
+          </div>
+          <div class="section-head" style="margin-top:18px;">FRAMING</div>
+          <div class="rso-options" id="videoScalingOptions">
+            <div class="rso-opt" data-scaling="fit"><div class="rso-radio"></div><div><div class="rso-opt-title">FIT</div><div class="rso-opt-desc">Whole frame visible, black bars if the shape differs.</div></div></div>
+            <div class="rso-opt" data-scaling="fill"><div class="rso-radio"></div><div><div class="rso-opt-title">FILL</div><div class="rso-opt-desc">Fills the screen, cropping the edges.</div></div></div>
+            <div class="rso-opt" data-scaling="stretch"><div class="rso-radio"></div><div><div class="rso-opt-title">STRETCH</div><div class="rso-opt-desc">Stretches to the screen, ignoring the aspect ratio.</div></div></div>
+          </div>
+          <div class="hint-text" style="margin-top:14px;">Adding a video channel projects it automatically on the selected display. The screen icon on the channel still opens the small floating preview for the operator.</div>
+        </div>
+        <div class="panel" id="panel-timecode">
+          <h1>Timecode</h1>
+          <div class="subtitle">Send MIDI Time Code (MTC) to the console alongside MSC cues.</div>
+          <div class="section-head">MTC OUTPUT</div>
+          <div class="rso-options" id="tcEnableOptions">
+            <div class="rso-opt" data-tc-enabled="0">
+              <div class="rso-radio"></div>
+              <div><div class="rso-opt-title">OFF</div>
+                <div class="rso-opt-desc">No timecode is sent. MSC cues work as before.</div></div>
+            </div>
+            <div class="rso-opt" data-tc-enabled="1">
+              <div class="rso-radio"></div>
+              <div><div class="rso-opt-title">ON</div>
+                <div class="rso-opt-desc">MTC follows the playhead on the MIDI output selected under MIDI. MSC cues keep firing too.</div></div>
+            </div>
+          </div>
+          <div class="section-head" style="margin-top:18px;">FRAME RATE</div>
+          <div class="section-sub">Must match the timecode setting on the console exactly.</div>
+          <div class="rso-options" id="tcFpsOptions">
+            <div class="rso-opt" data-fps="24"><div class="rso-radio"></div><div><div class="rso-opt-title">24 fps</div><div class="rso-opt-desc">Film.</div></div></div>
+            <div class="rso-opt" data-fps="25"><div class="rso-radio"></div><div><div class="rso-opt-title">25 fps</div><div class="rso-opt-desc">PAL — the usual choice in Europe and Israel.</div></div></div>
+            <div class="rso-opt" data-fps="29.97"><div class="rso-radio"></div><div><div class="rso-opt-title">29.97 fps drop-frame</div><div class="rso-opt-desc">NTSC video.</div></div></div>
+            <div class="rso-opt" data-fps="30"><div class="rso-radio"></div><div><div class="rso-opt-title">30 fps</div><div class="rso-opt-desc">NTSC non-drop.</div></div></div>
+          </div>
+          <div class="hint-text" style="margin-top:14px;">Each song is given its own hour (Song 1 = 01:00:00:00, Song 2 = 02:00:00:00 …) so timecode shows on the console never overlap. The hour stays with the song even if the running order changes, and can be changed in the song's controls in Edit Mode.</div>
+        </div>
+        <div class="panel" id="panel-general">
+          <h1>General</h1>
+          <div class="subtitle">Auto Save and button password protection.</div>
+          <div class="section-head">AUTO SAVE</div>
+          <div class="section-sub">Automatically save the current project in the background.</div>
+          <div class="rso-options" id="autoSaveOptions">
+            <div class="rso-opt" data-minutes="0">
+              <div class="rso-radio"></div>
+              <div>
+                <div class="rso-opt-title">OFF</div>
+                <div class="rso-opt-desc">Auto Save is disabled — save manually with File → Save.</div>
+              </div>
+            </div>
+            <div class="rso-opt" data-minutes="1">
+              <div class="rso-radio"></div>
+              <div>
+                <div class="rso-opt-title">EVERY 1 MINUTE</div>
+                <div class="rso-opt-desc">Saves the project automatically once every minute.</div>
+              </div>
+            </div>
+            <div class="rso-opt" data-minutes="5">
+              <div class="rso-radio"></div>
+              <div>
+                <div class="rso-opt-title">EVERY 5 MINUTES</div>
+                <div class="rso-opt-desc">Saves the project automatically every 5 minutes.</div>
+              </div>
+            </div>
+            <div class="rso-opt" data-minutes="10">
+              <div class="rso-radio"></div>
+              <div>
+                <div class="rso-opt-title">EVERY 10 MINUTES</div>
+                <div class="rso-opt-desc">Saves the project automatically every 10 minutes.</div>
+              </div>
+            </div>
+          </div>
+          <div class="status">Auto Save only writes to a project you've already saved once (File → Save or Save As) — it never opens a save dialog on its own, so it won't interrupt a show. Changes here take effect once you click Save below.</div>
+          <div class="section-head" style="margin-top:26px;">BUTTON PASSWORD</div>
+          <div class="section-sub">Protect critical buttons with a password.</div>
+          <div class="pwd-badge" id="pwdBadge"></div>
+          <div class="field">
+            <label>New Password</label>
+            <input type="password" id="pwdNewInput" placeholder="New password">
+          </div>
+          <div class="field">
+            <label>Confirm Password</label>
+            <input type="password" id="pwdConfirmInput" placeholder="Confirm password">
+          </div>
+          <div class="pwd-btn-row">
+            <div class="pwd-btn pwd-btn-save" id="pwdSaveBtn">Save Password</div>
+            <div class="pwd-btn pwd-btn-clear" id="pwdClearBtn">Remove Protection</div>
+          </div>
+          <div class="pwd-msg" id="pwdMsg"></div>
+          <div class="status">When set, "PLAY ALL", the Cue Lock button, and the AMO (disconnect MIDI) button on the main screen will all ask for this password every time they're clicked. This applies immediately — it does not wait for Save.</div>
+        </div>
+      </div>
+    </div>
+    <div class="footer">
+      <span id="prefsVersion" class="prefs-version"></span>
+      <button class="save-btn" id="saveBtn">Save</button>
+    </div>
+  </div>
+
+<script>
+  document.querySelectorAll('.cat').forEach(cat=>{
+    cat.addEventListener('click', ()=>{
+      document.querySelectorAll('.cat').forEach(c=>c.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+      cat.classList.add('active');
+      document.getElementById('panel-'+cat.getAttribute('data-panel')).classList.add('active');
+    });
+  });
+
+  const staged = { midiOut: '', midiIn: '', audioOut: '', rsoMode: 'onlyPlay', autoSaveMinutes: 0 };
+
+  async function load(){
+    const lists = await window.prefsAPI.requestDeviceLists();
+    if(lists){
+      fill('midiOutSelect', lists.midiOutputs, lists.selectedMidiOut, '— Select MIDI Output —');
+      fill('midiInSelect', lists.midiInputs, lists.selectedMidiIn, '— Select MIDI Input —');
+      fill('audioOutSelect', lists.audioOutputs, lists.selectedAudioOut, '— Select Audio Output —');
+      staged.midiOut = lists.selectedMidiOut || '';
+      staged.midiIn = lists.selectedMidiIn || '';
+      staged.audioOut = lists.selectedAudioOut || '';
+    }
+    const rso = await window.prefsAPI.requestRsoMode();
+    if(rso && rso.mode){
+      staged.rsoMode = rso.mode;
+      applyRsoSelectionUI(rso.mode);
+    } else {
+      applyRsoSelectionUI(staged.rsoMode);
+    }
+    const autoSave = await window.prefsAPI.requestAutoSaveInterval();
+    if(autoSave && typeof autoSave.minutes==='number'){
+      staged.autoSaveMinutes = autoSave.minutes;
+    }
+    applyAutoSaveSelectionUI(staged.autoSaveMinutes);
+  }
+  function fill(selectId, items, selectedId, placeholder){
+    const sel = document.getElementById(selectId);
+    sel.innerHTML = '<option value="">'+placeholder+'</option>';
+    (items||[]).forEach(it=>{
+      const opt = document.createElement('option');
+      opt.value = it.id; opt.textContent = it.name || it.id;
+      sel.appendChild(opt);
+    });
+    sel.value = selectedId || '';
+  }
+  document.getElementById('midiOutSelect').addEventListener('change', (e)=>{ staged.midiOut = e.target.value; });
+  document.getElementById('midiInSelect').addEventListener('change', (e)=>{ staged.midiIn = e.target.value; });
+  document.getElementById('audioOutSelect').addEventListener('change', (e)=>{ staged.audioOut = e.target.value; });
+
+  function applyRsoSelectionUI(mode){
+    document.querySelectorAll('#rsoOptions .rso-opt').forEach(opt=>{
+      opt.classList.toggle('selected', opt.getAttribute('data-mode')===mode);
+    });
+  }
+  document.querySelectorAll('#rsoOptions .rso-opt').forEach(opt=>{
+    opt.addEventListener('click', ()=>{
+      staged.rsoMode = opt.getAttribute('data-mode');
+      applyRsoSelectionUI(staged.rsoMode);
+    });
+  });
+
+  function applyAutoSaveSelectionUI(minutes){
+    document.querySelectorAll('#autoSaveOptions .rso-opt').forEach(opt=>{
+      opt.classList.toggle('selected', parseInt(opt.getAttribute('data-minutes'),10)===minutes);
+    });
+  }
+  document.querySelectorAll('#autoSaveOptions .rso-opt').forEach(opt=>{
+    opt.addEventListener('click', ()=>{
+      staged.autoSaveMinutes = parseInt(opt.getAttribute('data-minutes'),10);
+      applyAutoSaveSelectionUI(staged.autoSaveMinutes);
+    });
+  });
+
+  load();
+
+  if(window.prefsAPI && typeof window.prefsAPI.getAppVersion === 'function'){
+    window.prefsAPI.getAppVersion().then(info=>{
+      const el = document.getElementById('prefsVersion');
+      if(el && info && info.version) el.textContent = 'Cue Sync v' + info.version;
+    }).catch(()=>{});
+  }
+  document.getElementById('saveBtn').addEventListener('click', ()=>{
+    window.prefsAPI.setDevice('midiOut', staged.midiOut);
+    window.prefsAPI.setDevice('midiIn', staged.midiIn);
+    window.prefsAPI.setDevice('audioOut', staged.audioOut);
+    window.prefsAPI.setRsoMode(staged.rsoMode);
+    window.prefsAPI.setAutoSaveInterval(staged.autoSaveMinutes);
+    if(window.prefsAPI.setTimecode) window.prefsAPI.setTimecode({ enabled: tcStaged.enabled, fps: tcStaged.fps });
+    if(window.prefsAPI.setVideoSettings) window.prefsAPI.setVideoSettings({
+      displayId: vidStaged.displayId, autoProject: vidStaged.autoProject,
+      scaling: vidStaged.scaling, resolution: vidStaged.resolution });
+    window.close();
+  });
+
+  async function loadPasswordStatus(){
+    const status = await window.prefsAPI.requestPasswordStatus();
+    const badge = document.getElementById('pwdBadge');
+    if(status && status.hasPassword){
+      badge.textContent = '🔒 Protection is ON';
+      badge.className = 'pwd-badge on';
+    } else {
+      badge.textContent = '🔓 Protection is OFF';
+      badge.className = 'pwd-badge off';
+    }
+  }
+  function showPwdMsg(text, ok){
+    const msg = document.getElementById('pwdMsg');
+    msg.textContent = text;
+    msg.className = 'pwd-msg ' + (ok ? 'ok' : 'err');
+  }
+  document.getElementById('pwdSaveBtn').addEventListener('click', ()=>{
+    const p1 = document.getElementById('pwdNewInput').value;
+    const p2 = document.getElementById('pwdConfirmInput').value;
+    if(!p1){ showPwdMsg('Enter a password first.', false); return; }
+    if(p1 !== p2){ showPwdMsg('Passwords do not match.', false); return; }
+    window.prefsAPI.setPassword(p1);
+    document.getElementById('pwdNewInput').value = '';
+    document.getElementById('pwdConfirmInput').value = '';
+    showPwdMsg('Password saved.', true);
+    loadPasswordStatus();
+  });
+  document.getElementById('pwdClearBtn').addEventListener('click', ()=>{
+    window.prefsAPI.clearPassword();
+    document.getElementById('pwdNewInput').value = '';
+    document.getElementById('pwdConfirmInput').value = '';
+    showPwdMsg('Password protection removed.', true);
+    loadPasswordStatus();
+  });
+  loadPasswordStatus();
+
+  // ---------- Timecode panel ----------
+  const tcStaged = { enabled: false, fps: 25 };
+  function paintTc(){
+    document.querySelectorAll('#tcEnableOptions .rso-opt').forEach(o=>
+      o.classList.toggle('selected', (o.getAttribute('data-tc-enabled')==='1') === tcStaged.enabled));
+    document.querySelectorAll('#tcFpsOptions .rso-opt').forEach(o=>
+      o.classList.toggle('selected', parseFloat(o.getAttribute('data-fps')) === tcStaged.fps));
+  }
+  document.querySelectorAll('#tcEnableOptions .rso-opt').forEach(o=> o.addEventListener('click', ()=>{
+    tcStaged.enabled = o.getAttribute('data-tc-enabled')==='1'; paintTc(); }));
+  document.querySelectorAll('#tcFpsOptions .rso-opt').forEach(o=> o.addEventListener('click', ()=>{
+    tcStaged.fps = parseFloat(o.getAttribute('data-fps')); paintTc(); }));
+  if(window.prefsAPI && window.prefsAPI.getTimecode){
+    window.prefsAPI.getTimecode().then(st=>{
+      if(st){ tcStaged.enabled = !!st.enabled; tcStaged.fps = st.fps || 25; }
+      paintTc();
+    }).catch(()=>paintTc());
+  } else { paintTc(); }
+
+  // ---------- Video panel ----------
+  const vidStaged = { displayId:null, autoProject:true, scaling:'fit', resolution:'native' };
+  function monitorSvg(active){
+    const screenFill = active ? '#1c6b58' : '#232a35';
+    const glow = active ? '#2ec4a6' : '#39424f';
+    return '<svg class="mon" viewBox="0 0 120 84">' +
+      '<rect x="8" y="6" width="104" height="62" rx="5" fill="#0f1319" stroke="'+glow+'" stroke-width="2"/>' +
+      '<rect x="13" y="11" width="94" height="52" rx="3" fill="'+screenFill+'"/>' +
+      (active ? '<polygon points="52,27 72,37 52,47" fill="#0f1319" opacity=".85"/>' : '') +
+      '<rect x="50" y="68" width="20" height="5" fill="'+glow+'"/>' +
+      '<rect x="38" y="73" width="44" height="4" rx="2" fill="'+glow+'"/>' +
+      '</svg>';
+  }
+  function paintVideo(displays){
+    const wrap = document.getElementById('videoScreens');
+    if(!wrap) return;
+    const primary = displays.find(d=>d.isPrimary);
+    const external = displays.filter(d=>!d.isPrimary);
+    const cards = [];
+    if(primary){
+      const sel = vidStaged.displayId === primary.id;
+      cards.push('<div class="screen-card'+(sel?' selected':'')+'" data-display-id="'+primary.id+'">' +
+        monitorSvg(sel) + '<div class="screen-name">This computer</div>' +
+        '<div class="screen-meta">'+primary.width+' × '+primary.height+'</div>' +
+        '<div class="screen-badge">'+(sel?'VIDEO OUTPUT':'PRIMARY')+'</div></div>');
+    }
+    if(external.length){
+      external.forEach((d,i)=>{
+        const sel = (vidStaged.displayId === d.id) || (vidStaged.displayId === null && i === 0);
+        cards.push('<div class="screen-card'+(sel?' selected':'')+'" data-display-id="'+d.id+'">' +
+          monitorSvg(sel) + '<div class="screen-name">External display'+(external.length>1?(' '+(i+1)):'')+'</div>' +
+          '<div class="screen-meta">'+d.width+' × '+d.height+'</div>' +
+          '<div class="screen-badge">'+(sel?'VIDEO OUTPUT':'AVAILABLE')+'</div></div>');
+      });
+    } else {
+      cards.push('<div class="screen-card missing">' + monitorSvg(false) +
+        '<div class="screen-name">No second display</div>' +
+        '<div class="screen-meta">not connected</div>' +
+        '<div class="screen-badge">CONNECT ONE</div></div>');
+    }
+    wrap.innerHTML = cards.join('');
+    wrap.querySelectorAll('.screen-card[data-display-id]').forEach(c=>{
+      c.addEventListener('click', ()=>{
+        vidStaged.displayId = Number(c.getAttribute('data-display-id'));
+        paintVideo(displays);
+      });
+    });
+    document.querySelectorAll('#videoResOptions .rso-opt').forEach(o=>
+      o.classList.toggle('selected', o.getAttribute('data-res') === vidStaged.resolution));
+    document.querySelectorAll('#videoScalingOptions .rso-opt').forEach(o=>
+      o.classList.toggle('selected', o.getAttribute('data-scaling') === vidStaged.scaling));
+  }
+  let vidDisplays = [];
+  document.querySelectorAll('#videoResOptions .rso-opt').forEach(o=> o.addEventListener('click', ()=>{
+    vidStaged.resolution = o.getAttribute('data-res'); paintVideo(vidDisplays); }));
+  document.querySelectorAll('#videoScalingOptions .rso-opt').forEach(o=> o.addEventListener('click', ()=>{
+    vidStaged.scaling = o.getAttribute('data-scaling'); paintVideo(vidDisplays); }));
+  if(window.prefsAPI && window.prefsAPI.getVideoDisplays){
+    window.prefsAPI.getVideoDisplays().then(r=>{
+      vidDisplays = (r && r.displays) || [];
+      if(r && r.settings){
+        vidStaged.displayId = r.settings.displayId;
+        vidStaged.autoProject = r.settings.autoProject !== false;
+        vidStaged.scaling = r.settings.scaling || 'fit';
+        vidStaged.resolution = r.settings.resolution || 'native';
+      }
+      paintVideo(vidDisplays);
+    }).catch(()=>paintVideo([]));
+  }
+</script>
+</body>
+</html>

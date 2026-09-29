@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Remote Control — Cue Sync</title>
+<style>
+  :root{
+    --bg:#12151a; --panel:#171b21; --line:#242a33; --text:#ece9e2;
+    --muted:#8891a0; --cyan:#45d6c0;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;}
+  .wrap{padding:22px;}
+  h1{font-size:14px;margin:0 0 6px;font-weight:700;}
+  .sub{font-size:11px;color:var(--muted);margin-bottom:18px;line-height:1.6;}
+  .url-box{
+    background:var(--panel);border:1px solid var(--line);border-radius:8px;
+    padding:10px 12px;margin-bottom:8px;
+  }
+  .url{
+    font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--cyan);
+    word-break:break-all;
+  }
+  .hint{font-size:10.5px;color:var(--muted);margin-top:16px;line-height:1.6;}
+  .empty{font-size:12px;color:var(--muted);}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Remote Control</h1>
+    <div class="sub">Open this address on your phone's browser (same WiFi network):</div>
+    <div id="urls"><div class="empty">Starting server…</div></div>
+    <div class="hint">Your phone must be connected to the same WiFi network as this computer.</div>
+  </div>
+<script>
+  window.remoteInfoAPI.onRemoteInfo((info)=>{
+    const container = document.getElementById('urls');
+    if(!info || !info.urls || info.urls.length===0){
+      container.innerHTML = '<div class="empty">Could not start the remote server on this network.</div>';
+      return;
+    }
+    container.innerHTML = info.urls.map(u=>'<div class="url-box"><div class="url">'+u+'</div></div>').join('');
+  });
+</script>
+</body>
+</html>
