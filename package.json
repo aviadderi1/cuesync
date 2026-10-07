@@ -1,6 +1,6 @@
 {
   "name": "cue-sync",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Cue Sync - stage playback and MIDI Show Control cue tool",
   "main": "main.js",
   "author": "Aviad",

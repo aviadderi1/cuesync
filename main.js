@@ -728,12 +728,46 @@ async function loadProjectFromPath(win, jsonPath) {
 
     // Prefer reading straight from the song's original location on disk —
     // this is how most songs are saved now (by reference, not duplicated).
+    //
+    // Candidates are tried in order so that a project stays loadable after it
+    // and its media have been moved together (which is exactly what "Backup
+    // Project" produces). A backup writes a BARE FILENAME into originalPath,
+    // and a bare name passed to readFileSync would resolve against the
+    // process working directory — never the folder holding the .cuesync file
+    // — so it must be joined to `dir` explicitly.
+    const candidates = [];
+    // A path recorded on one OS may be read on the other, so the last path
+    // segment is taken by splitting on BOTH separators. Node's path.basename
+    // only knows the separator of the platform it is running on, and would
+    // hand back a whole "C:\Users\...\song.wav" unchanged on macOS.
+    const lastSegment = (p) => String(p).split(/[\\/]/).pop();
+
+    if (sData.backupFile) candidates.push(path.join(dir, lastSegment(sData.backupFile)));
     if (sData.originalPath) {
+      const op = sData.originalPath;
+      const absolute = path.isAbsolute(op) || /^[a-zA-Z]:[\\/]/.test(op);
+      if (absolute) {
+        candidates.push(op);
+      } else {
+        candidates.push(path.resolve(dir, op));
+      }
+      // Last resort: a file of the same name sitting beside the project. This
+      // rescues a backup whose manifest still carries absolute paths from the
+      // machine it was made on, including one made on the other OS.
+      candidates.push(path.join(dir, lastSegment(op)));
+    }
+
+    for (const candidate of candidates) {
       try {
-        buf = fs.readFileSync(sData.originalPath);
+        buf = fs.readFileSync(candidate);
+        // Pin the manifest to where the file actually turned out to be, so a
+        // later Save or Backup of this project works from a real location
+        // rather than a bare name that only meant something next to the old
+        // project file.
+        sData.originalPath = candidate;
+        break;
       } catch (readErr) {
-        // Original file moved/renamed/deleted — fall through to the media
-        // folder below in case an older save also embedded a copy there.
+        // Try the next candidate; the media-folder fallback below still applies.
       }
     }
 
