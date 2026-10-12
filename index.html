@@ -2741,19 +2741,25 @@
     sendMIDI(msg, 'TEST → MSC GO cue 1');
   });
 
+  // Applies the lock state and repaints both buttons. Separated from the
+  // toggle so restoring a saved project can set it without putting the
+  // operator through the password prompt for a state they already chose.
+  function setCueLock(locked){
+    qLocked = !!locked;
+    setTimeout(pushRemoteState, 0);
+    const title = qLocked ? 'Q button locked — click to unlock' : 'Q button unlocked — click to lock';
+    const mainBtn = el('panicBtn');
+    mainBtn.innerHTML = '<span class="lock-icon">'+(qLocked?'🔒':'🔓')+'</span> CUE LOCK';
+    mainBtn.classList.toggle('locked', qLocked);
+    mainBtn.title = title;
+    const smBtn = el('smCueLockBtn');
+    if(smBtn){ smBtn.innerHTML = '<span class="lock-icon">'+(qLocked?'🔒':'🔓')+'</span><br>CUE LOCK'; smBtn.classList.toggle('locked', qLocked); smBtn.title = title; }
+    appRoot.classList.toggle('cues-locked', qLocked);
+    updateMarkBtnState();
+  }
   function toggleCueLock(){
     requirePasswordThen(qLocked ? 'Unlock Cues' : 'Lock Cues', ()=>{
-      qLocked = !qLocked;
-      setTimeout(pushRemoteState, 0);
-      const title = qLocked ? 'Q button locked — click to unlock' : 'Q button unlocked — click to lock';
-      const mainBtn = el('panicBtn');
-      mainBtn.innerHTML = '<span class="lock-icon">'+(qLocked?'🔒':'🔓')+'</span> CUE LOCK';
-      mainBtn.classList.toggle('locked', qLocked);
-      mainBtn.title = title;
-      const smBtn = el('smCueLockBtn');
-      if(smBtn){ smBtn.innerHTML = '<span class="lock-icon">'+(qLocked?'🔒':'🔓')+'</span><br>CUE LOCK'; smBtn.classList.toggle('locked', qLocked); smBtn.title = title; }
-      appRoot.classList.toggle('cues-locked', qLocked);
-      updateMarkBtnState();
+      setCueLock(!qLocked);
     });
   }
   el('panicBtn').addEventListener('click', toggleCueLock);
@@ -3019,7 +3025,12 @@
         song.gainNode = null;
         cancelAnimationFrame(rafId);
         renderTrackPlayhead(song.id);
-        if(song.isVideo) syncVideoPopup(song);
+        // A clip that has run out should leave the screen rather than freeze
+        // its last frame in front of the audience.
+        if(song.isVideo){
+          syncVideoPopup(song);
+          unprojectVideo(song);
+        }
         handleTrackNaturalEnd(song.id);
       }
     };
@@ -3030,7 +3041,13 @@
     song.playOffset = offset;
     song.isPlaying = true;
     song._crossfadeStarted = false;
-    if(song.isVideo) syncVideoPopup(song);
+    // Playing a video channel is what puts it on screen — full screen on
+    // whichever display Preferences points at. The screen button on the row
+    // is only ever the small preview window.
+    if(song.isVideo){
+      if(!song._videoProjected) projectVideo(song);
+      else syncVideoPopup(song);
+    }
     mtcLocate(song);
   }
   // The four fade shapes offered in the curve picker. Each takes local
@@ -3446,7 +3463,6 @@
       song.duration = probe.duration || 0;
       song.trimEnd = song.duration;
       await loadCuesFor(song);
-      projectVideo(song);
       renderSongList();
       if(activeTrackId===song.id || tracks.includes(song.id)) renderTracks();
       generateVideoThumbnails(song).then(thumbs=>{
@@ -3505,10 +3521,10 @@
   // display for the audience, the preview stays on the operator's screen.
   async function projectVideo(song){
     if(!song || !song.isVideo || !window.electronAPI) return;
-    if(typeof window.electronAPI.hasSecondDisplay !== 'function') return;
-    let has = false;
-    try{ has = await window.electronAPI.hasSecondDisplay(); }catch(e){ return; }
-    if(!has) return;                                  // nothing connected: stay quiet
+    // The main process decides which display to use — an explicitly chosen
+    // one in Preferences, otherwise an external screen, otherwise this
+    // computer's own. So there is nothing to veto here: if the operator
+    // pressed play on a video channel, it goes on screen.
     const videoPath = song.file && song.file.path;
     song._videoProjected = true;
     if(videoPath){
@@ -3532,10 +3548,15 @@
     window.electronAPI.closeVideoOutput({ songId: song.id });
     song._videoProjected = false;
   }
-  // A display being plugged in after import should still pick up the videos.
+  // A display being plugged in or out mid-show should move whatever is
+  // actually playing; it must not start projecting idle channels.
   if(window.electronAPI && typeof window.electronAPI.onVideoDisplaysChanged === 'function'){
     window.electronAPI.onVideoDisplaysChanged(()=>{
-      songs.forEach(s=>{ if(s.isVideo && !s._videoProjected) projectVideo(s); });
+      songs.forEach(s=>{
+        if(!s.isVideo || !s.isPlaying) return;
+        unprojectVideo(s);
+        projectVideo(s);
+      });
     });
   }
   async function openVideoPopup(songId){
@@ -3585,9 +3606,14 @@
   // during playback from the main frame loop. The window itself lives
   // entirely in the main process now, so this just relays state over IPC
   // rather than touching a window/document reference directly.
+  // Keeps every open video surface — the floating preview AND the fullscreen
+  // projector — lined up with the transport. This used to return early unless
+  // the preview window happened to be open, which is why a projected video
+  // ignored Pause and Stop and kept running on the external screen.
   function syncVideoPopup(song){
-    if(!song._videoPreviewOpen) return;
+    if(!song) return;
     if(!window.electronAPI || typeof window.electronAPI.syncVideoPreview !== 'function') return;
+    if(!song._videoPreviewOpen && !song._videoProjected) return;
     window.electronAPI.syncVideoPreview({
       songId: song.id,
       action: song.isPlaying ? 'play' : 'pause',
@@ -5362,7 +5388,13 @@
       s.playedCueIds.clear();
       renderTrackPlayhead(s.id);
       updateTrackGlow(s.id);
-      if(s.isVideo) syncVideoPopup(s);
+      // Double-Stop is the "we're done" gesture: rewind everything and take
+      // the projected video off the screen entirely, rather than leaving a
+      // paused first frame hanging in front of the audience.
+      if(s.isVideo){
+        syncVideoPopup(s);
+        unprojectVideo(s);
+      }
     });
     playingTrackId = null;
     lastFireTime = 0;
@@ -5386,6 +5418,8 @@
       markPlayedPins(s.id);
       renderCueStack();
       updateTrackGlow(s.id);
+      // Stop pauses the projected video at the top of the track; the window
+      // stays so a second Play picks straight back up without a black flash.
       if(s.isVideo) syncVideoPopup(s);
       mtcLocate(s);
     }
@@ -8269,6 +8303,10 @@
       mscSettings: {
         deviceId: getMscDeviceId(), format: getMscFormat(), channel: getDefaultChannel()+1
       },
+      // Everything needed for this project to behave identically on another
+      // machine. Settings that live in the main process (timecode, video
+      // output) are snapshotted here and pushed back on open.
+      settings: collectProjectSettings(),
       tracks: tracks.slice(),
       groups: groups.map(g=>({id:g.id, name:g.name, collapsed:!!g.collapsed, color:g.color||''})),
       songs: []
@@ -8321,6 +8359,10 @@
       if(manifest.mscSettings.format!=null) el('mscFormat').value = manifest.mscSettings.format;
       if(manifest.mscSettings.channel!=null) el('defaultChannel').value = manifest.mscSettings.channel;
     }
+    // Audio, video, timecode, MIDI and the Cue Lock state the project was
+    // saved with. Applied after mscSettings so the newer block wins where
+    // the two overlap.
+    applyProjectSettings(manifest.settings);
 
     for(const sData of manifest.songs){
       const af = audioMap.get(sData.id);
@@ -8379,17 +8421,85 @@
     updateMarkBtnState();
     const as = activeSong();
     [playBtn, stopBtn].forEach(b=>b.disabled = !as || !as.audioBuffer);
-    // Opening a project with video in it should behave like importing that
-    // video: if a second display is connected, start projecting right away
-    // rather than waiting for a display to be plugged in or out.
-    songs.forEach(s=>{ if(s.isVideo && !s._videoProjected) projectVideo(s); });
   }
+  // ---------- Project-wide settings ----------
+  // A .cuesync file should reopen the same show on any machine, so these
+  // travel with the project rather than living only in this installation's
+  // preferences. Device-specific things (which MIDI port exists, which
+  // display is plugged in) are stored by NAME and matched loosely on open,
+  // because ids differ from machine to machine.
+  let pendingProjectVideoSettings = null;
+  function collectProjectSettings(){
+    const st = {
+      cueLock: !!qLocked,
+      masterVolume: (typeof masterVolume === 'number' ? masterVolume : 1),
+      midi: {
+        outputName: (selectedOutput && selectedOutput.name) ? selectedOutput.name : '',
+        deviceId: getMscDeviceId(),
+        format: getMscFormat(),
+        channel: getDefaultChannel() + 1
+      },
+      timecode: {
+        enabled: !!(mtcSettings && mtcSettings.enabled),
+        fps: (mtcSettings && mtcSettings.fps) || 25
+      }
+    };
+    if(pendingProjectVideoSettings) st.video = pendingProjectVideoSettings;
+    return st;
+  }
+
+  // Kept current from the main process so a save always has the live values.
+  if(window.electronAPI && typeof window.electronAPI.getVideoSettings === 'function'){
+    window.electronAPI.getVideoSettings()
+      .then(r => { if(r && r.settings) pendingProjectVideoSettings = r.settings; })
+      .catch(()=>{});
+  }
+  if(window.electronAPI && typeof window.electronAPI.onVideoSettings === 'function'){
+    window.electronAPI.onVideoSettings((st)=>{ if(st) pendingProjectVideoSettings = st; });
+  }
+
+  function applyProjectSettings(st){
+    if(!st) return;
+
+    if(typeof st.masterVolume === 'number') setMasterVolume(st.masterVolume);
+
+    if(st.midi){
+      if(st.midi.deviceId != null) el('mscDeviceId').value = st.midi.deviceId;
+      if(st.midi.format != null) el('mscFormat').value = st.midi.format;
+      if(st.midi.channel != null) el('defaultChannel').value = st.midi.channel;
+      // Port ids are regenerated per machine, so reconnect by the port's name.
+      if(st.midi.outputName && midiAccess){
+        try{
+          for(const out of midiAccess.outputs.values()){
+            if(out.name === st.midi.outputName){ selectedOutput = out; break; }
+          }
+        }catch(e){}
+      }
+    }
+
+    if(st.timecode && window.electronAPI && typeof window.electronAPI.setTimecodeSettings === 'function'){
+      const tc = { enabled: !!st.timecode.enabled, fps: st.timecode.fps || 25 };
+      window.electronAPI.setTimecodeSettings(tc);
+      if(typeof mtcApplySettings === 'function') mtcApplySettings(tc);
+    }
+
+    if(st.video && window.electronAPI && typeof window.electronAPI.setVideoSettings === 'function'){
+      window.electronAPI.setVideoSettings(st.video);
+      pendingProjectVideoSettings = st.video;
+    }
+
+    // Cue Lock last: it gates other controls, so everything else is in place
+    // by the time it takes effect.
+    if(typeof st.cueLock === 'boolean') setCueLock(st.cueLock);
+  }
+
   async function buildProjectDataObject(){
     const data = {
       app: 'cue-sync', version: 1, exportedAt: new Date().toISOString(),
       mscSettings: {
         deviceId: getMscDeviceId(), format: getMscFormat(), channel: getDefaultChannel()+1
       },
+      settings: collectProjectSettings(),
       tracks: tracks.slice(),
       groups: groups.map(g=>({id:g.id, name:g.name, collapsed:!!g.collapsed, color:g.color||''})),
       songs: []
@@ -8451,6 +8561,7 @@
       if(data.mscSettings.format!=null) el('mscFormat').value = data.mscSettings.format;
       if(data.mscSettings.channel!=null) el('defaultChannel').value = data.mscSettings.channel;
     }
+    applyProjectSettings(data.settings);
 
     for(const sData of data.songs){
       const songIsVideo = !!sData.isVideo;

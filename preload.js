@@ -45,6 +45,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onVideoDisplaysChanged: (cb) => ipcRenderer.on('video-displays-changed', (e, d) => cb(d)),
   getTimecodeSettings: () => ipcRenderer.invoke('tc-get-settings'),
   onTimecodeSettings: (callback) => ipcRenderer.on('tc-settings', (event, st) => callback(st)),
+  // Opening a project has to be able to restore the timecode and video
+  // settings it was saved with, so the main window needs the same setters the
+  // Preferences window uses — not just the read side.
+  setTimecodeSettings: (st) => ipcRenderer.send('tc-set-settings', st),
+  setVideoSettings: (st) => ipcRenderer.send('video-set-settings', st),
+  getVideoSettings: () => ipcRenderer.invoke('video-get-displays'),
+  closeAllVideoWindows: () => ipcRenderer.send('close-all-video-windows'),
 
   // Key Commands window bridge (relayed through main.js)
   onRequestKeyBindings: (callback) => ipcRenderer.on('request-key-bindings', callback),

@@ -244,6 +244,11 @@ function createWindow() {
   });
   mainWindow = win;
 
+  // The projector and preview windows are children of the show, not of
+  // themselves: closing the main window must take them with it, or the video
+  // carries on playing on the external screen with nothing left to stop it.
+  win.on('close', () => { closeAllVideoWindows(); });
+
   // Defense-in-depth: dropping a file onto the window must never navigate
   // the app away from itself. The renderer already handles real song
   // imports via drag-and-drop, but if a drop ever reaches Electron's
@@ -1273,6 +1278,20 @@ ipcMain.handle('remote-start', () => {
 // load another file:// resource without that restriction.
 const videoPreviewWindows = new Map(); // songId -> BrowserWindow
 const videoOutputWindows = new Map();  // songId -> fullscreen projector window
+const lastVideoSync = new Map();       // songId -> {action, time}, replayed once a window finishes loading
+
+// The one place that turns a transport instruction into player commands, so
+// a freshly opened window and a running one are driven by identical code.
+function videoSyncJs(action, time) {
+  return [
+    'var v = document.getElementById("v");',
+    'if (v) {',
+    (typeof time === 'number') ? ('  if (Math.abs(v.currentTime - ' + time + ') > 0.15) { try { v.currentTime = ' + time + '; } catch(e) {} }') : '',
+    (action === 'play') ? '  if (v.paused) { v.play().catch(function(){}); }' : '',
+    (action === 'pause') ? '  if (!v.paused) { v.pause(); }' : '',
+    '}'
+  ].join('\n');
+}
 
 // ---------- Video output settings ----------
 // Which display the video is projected on, and how it is scaled there.
@@ -1309,11 +1328,15 @@ function resolveOutputDisplay() {
   const all = screen.getAllDisplays();
   const primary = screen.getPrimaryDisplay();
   const st = readVideoSettings();
+  // An explicit choice wins, even when it is the computer's own screen —
+  // a single-monitor setup is a legitimate place to project from.
   if (st.displayId != null) {
     const chosen = all.find(d => d.id === st.displayId);
     if (chosen) return chosen;
   }
-  return all.find(d => d.id !== primary.id) || null;
+  // No choice stored: prefer an external display, fall back to the primary
+  // so playing a video always puts it somewhere rather than nowhere.
+  return all.find(d => d.id !== primary.id) || primary || null;
 }
 ipcMain.handle('video-get-displays', () => ({ displays: listDisplays(), settings: readVideoSettings() }));
 ipcMain.on('video-set-settings', (event, st) => {
@@ -1381,6 +1404,10 @@ function createVideoOutputWindow(songId, videoPath, extraTempFiles) {
       win.setFullScreen(true);
       win.show();
       win.webContents.executeJavaScript(videoScalingJs(st)).catch(() => {});
+      // Catch up on whatever the transport asked for while this window was
+      // still loading — normally the "play" that opened it in the first place.
+      const pending = lastVideoSync.get(songId);
+      if (pending) win.webContents.executeJavaScript(videoSyncJs(pending.action, pending.time)).catch(() => {});
     });
     setTimeout(() => { if (!win.isDestroyed() && !win.isVisible()) win.show(); }, 1500);
     win.on('closed', () => {
@@ -1414,6 +1441,21 @@ ipcMain.on('close-video-output', (event, payload) => {
   const win = videoOutputWindows.get(songId);
   if (win && !win.isDestroyed()) win.close();
 });
+
+// Every projector and preview window belongs to the show, not to itself. If
+// one is left open the app has a visible window, so window-all-closed never
+// fires and both the app and the video keep running after the operator has
+// closed the main window.
+function closeAllVideoWindows() {
+  [videoOutputWindows, videoPreviewWindows].forEach((map) => {
+    if (!map) return;
+    Array.from(map.values()).forEach((w) => {
+      try { if (w && !w.isDestroyed()) w.destroy(); } catch (e) {}
+    });
+    map.clear();
+  });
+}
+ipcMain.on('close-all-video-windows', closeAllVideoWindows);
 ipcMain.handle('video-has-second-display', () => !!resolveOutputDisplay());
 
 function buildVideoPreviewHtml(fileUrl) {
@@ -1557,18 +1599,14 @@ ipcMain.on('open-video-preview-from-bytes', (event, payload) => {
 // so the video always matches whatever the audio is doing.
 ipcMain.on('sync-video-preview', (event, payload) => {
   const { songId, action, time } = payload || {};
+  // Remember the last instruction per song. A projector created the instant
+  // playback starts is still loading its page when the first play command
+  // arrives, so without this the window would come up and sit there paused.
+  if (songId) lastVideoSync.set(songId, { action, time });
   const targets = [videoPreviewWindows.get(songId), videoOutputWindows.get(songId)]
     .filter(w => w && !w.isDestroyed());
   if (!targets.length) return;
-  const js = [
-    'var v = document.getElementById("v");',
-    'if (v) {',
-    (typeof time === 'number') ? ('  if (Math.abs(v.currentTime - ' + time + ') > 0.15) { try { v.currentTime = ' + time + '; } catch(e) {} }') : '',
-    (action === 'play') ? '  if (v.paused) { v.play().catch(function(){}); }' : '',
-    (action === 'pause') ? '  if (!v.paused) { v.pause(); }' : '',
-    '}'
-  ].join('\n');
-  targets.forEach(w => w.webContents.executeJavaScript(js).catch(() => {}));
+  targets.forEach(w => w.webContents.executeJavaScript(videoSyncJs(action, time)).catch(() => {}));
 });
 
 app.whenReady().then(async () => {
@@ -1617,6 +1655,11 @@ app.whenReady().then(async () => {
 
 app.on('will-quit', () => {
   globalShortcut.unregisterAll();
+  closeAllVideoWindows();
+});
+
+app.on('before-quit', () => {
+  closeAllVideoWindows();
 });
 
 app.on('window-all-closed', () => {
