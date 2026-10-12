@@ -3327,6 +3327,9 @@
     // data is reliable.
     window.addEventListener('dragenter', (e)=>{
       e.preventDefault();
+      // A new drag entering the window starts with no target; without this a
+      // drop on empty space could reuse the line from the previous drag.
+      if(dragDepth === 0) lastDropRow = null;
       dragDepth++;
       // Internal reordering (songs, cues) uses 'text/plain' data that we
       // set ourselves synchronously in the drag's own dragstart handler —
@@ -3390,25 +3393,35 @@
       const mediaFiles = files.filter(f=> f.type.startsWith('audio/') || f.type.startsWith('video/') || /\.(mp3|wav|m4a|aac|ogg|flac|aiff|wma|mp4|mov|webm|mkv|m4v)$/i.test(f.name));
       const skipped = files.length - mediaFiles.length;
 
-      // Drop position, taken from where the pointer actually was. Hover
-      // bookkeeping during dragover is unreliable for file drags — the same
-      // reason dragenter/dragover above refuse to gate on isFileDrag — so the
-      // row is resolved here, at drop time, from the drop coordinates. The
-      // overlay has just been deactivated, and is ignored for hit-testing
-      // regardless, so it cannot swallow the lookup.
+      // Drop position. Two routes, because neither is reliable alone: the
+      // drop event's coordinates come back as 0 for OS file drops on some
+      // platforms, and hover state can be stale. The coordinates win when
+      // they resolve to a row; otherwise the row that last drew the green
+      // insertion line is used, which is what the operator was aiming at.
       let insertAt = null, insertGroupId = null;
+      let dropId = null, before = true;
+
       const prevPE = overlay.style.pointerEvents;
       overlay.style.pointerEvents = 'none';
       let hit = null;
-      try{ hit = document.elementFromPoint(e.clientX, e.clientY); }catch(err){ hit = null; }
+      if(e.clientX || e.clientY){
+        try{ hit = document.elementFromPoint(e.clientX, e.clientY); }catch(err){ hit = null; }
+      }
       overlay.style.pointerEvents = prevPE;
       const row = hit && hit.closest ? hit.closest('.song-item') : null;
       if(row){
-        const dropId = row.getAttribute('data-song-id');
+        dropId = row.getAttribute('data-song-id');
+        const rect = row.getBoundingClientRect();
+        before = (e.clientY - rect.top) < rect.height/2;
+      } else if(lastDropRow){
+        dropId = lastDropRow.songId;
+        before = lastDropRow.before;
+      }
+      lastDropRow = null;
+
+      if(dropId){
         const idx = songs.findIndex(s=>s.id===dropId);
         if(idx !== -1){
-          const rect = row.getBoundingClientRect();
-          const before = (e.clientY - rect.top) < rect.height/2;
           insertAt = idx + (before ? 0 : 1);
           insertGroupId = songs[idx].groupId || null;
         }
@@ -3425,6 +3438,11 @@
       }
     });
   })();
+
+  // Where the green insertion line was last drawn, i.e. where a dragged-in
+  // file should land. Kept at module scope because the row that draws the line
+  // and the window handler that performs the import are different listeners.
+  let lastDropRow = null;
 
   function isVideoFile(file){
     if(file.type && file.type.startsWith('video/')) return true;
@@ -3955,6 +3973,13 @@
       const before = (e.clientY - rect.top) < rect.height/2;
       songList.querySelectorAll('.song-item').forEach(r=>r.classList.remove('drop-above','drop-below'));
       item.classList.add(before ? 'drop-above' : 'drop-below');
+      // The green insertion line the operator sees IS this class, so recording
+      // the same decision here means an import lands exactly where the line
+      // showed it would. Deliberately NOT gated on isFileDrag(e): types can
+      // omit 'Files' during dragover (see the note above the window handlers),
+      // and a reorder drag setting this is harmless — the window-level drop
+      // only runs for real file drags.
+      lastDropRow = { songId: s.id, before };
     });
     item.addEventListener('drop', (e)=>{
       e.preventDefault();
