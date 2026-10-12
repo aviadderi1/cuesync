@@ -8290,6 +8290,7 @@
       manifest.songs.push({
         id: song.id, name: song.name, tcHour: (song.tcHour!=null ? song.tcHour : null),
         mimeType: song.file.type || 'audio/mpeg', audioExt: ext, originalPath: originalPath || '',
+        isVideo: !!song.isVideo,
         cues: song.cues,
         trimStart: song.trimStart, trimEnd: song.trimEnd,
         fadeInDur: song.fadeInDur, fadeOutDur: song.fadeOutDur,
@@ -8328,8 +8329,14 @@
         showToast('Missing audio file for "'+sData.name+'" — skipped.');
         continue;
       }
-      const blob = new Blob([af.buffer], {type: sData.mimeType||'audio/mpeg'});
-      const fileObj = new File([blob], sData.name, {type: sData.mimeType||'audio/mpeg'});
+      const songIsVideo = !!sData.isVideo;
+      // A video track's stored bytes are the video file itself. Give the Blob
+      // a video MIME type so the preview and projector can play it, even when
+      // an older manifest carried no mimeType and would default to audio.
+      const songMime = sData.mimeType
+        || (songIsVideo ? ('video/' + (sData.audioExt || 'mp4')) : 'audio/mpeg');
+      const blob = new Blob([af.buffer], {type: songMime});
+      const fileObj = new File([blob], sData.name, {type: songMime});
       if(sData.originalPath){
         try{ Object.defineProperty(fileObj, 'path', { value: sData.originalPath, writable: false, configurable: true }); }catch(e){}
       }
@@ -8345,6 +8352,13 @@
         compEnabled: !!sData.compEnabled, compThreshold: sData.compThreshold!=null?sData.compThreshold:-24, compRatio: sData.compRatio!=null?sData.compRatio:20, compAttack: sData.compAttack!=null?sData.compAttack:0.02, compRelease: sData.compRelease!=null?sData.compRelease:0.15,
         midLowGain: sData.midLowGain||0, midGain: sData.midGain||0, midHighGain: sData.midHighGain||0, fadeCurveType: sData.fadeCurveType||'linear', rowHeight: sData.rowHeight!=null?sData.rowHeight:null, headerWidth: sData.headerWidth!=null?sData.headerWidth:null
       };
+      // Without these the reloaded channel looks like a plain audio track: no
+      // screen icon in its header, no film-strip prefix on the name, no
+      // video-track styling, and nothing to project on the second display.
+      if(songIsVideo){
+        song.isVideo = true;
+        try{ song.videoUrl = URL.createObjectURL(blob); }catch(e){}
+      }
       songs.push(song);
       await decodeAudio(song);
       song.playOffset = getTrim(song).trimStart;
@@ -8365,6 +8379,10 @@
     updateMarkBtnState();
     const as = activeSong();
     [playBtn, stopBtn].forEach(b=>b.disabled = !as || !as.audioBuffer);
+    // Opening a project with video in it should behave like importing that
+    // video: if a second display is connected, start projecting right away
+    // rather than waiting for a display to be plugged in or out.
+    songs.forEach(s=>{ if(s.isVideo && !s._videoProjected) projectVideo(s); });
   }
   async function buildProjectDataObject(){
     const data = {
@@ -8435,8 +8453,11 @@
     }
 
     for(const sData of data.songs){
-      const blob = base64ToBlob(sData.audioBase64, sData.mimeType||'audio/mpeg');
-      const fileObj = new File([blob], sData.name, {type: sData.mimeType||'audio/mpeg'});
+      const songIsVideo = !!sData.isVideo;
+      const songMime = sData.mimeType
+        || (songIsVideo ? ('video/' + (sData.audioExt || 'mp4')) : 'audio/mpeg');
+      const blob = base64ToBlob(sData.audioBase64, songMime);
+      const fileObj = new File([blob], sData.name, {type: songMime});
       const song = {
         id: sData.id || uid(), name: sData.name, file: fileObj,
         duration:0, cues: sData.cues||[], peaks:null, pxPerSec: BASE_PX_PER_SEC,
@@ -8449,6 +8470,10 @@
         compEnabled: !!sData.compEnabled, compThreshold: sData.compThreshold!=null?sData.compThreshold:-24, compRatio: sData.compRatio!=null?sData.compRatio:20, compAttack: sData.compAttack!=null?sData.compAttack:0.02, compRelease: sData.compRelease!=null?sData.compRelease:0.15,
         midLowGain: sData.midLowGain||0, midGain: sData.midGain||0, midHighGain: sData.midHighGain||0, fadeCurveType: sData.fadeCurveType||'linear', rowHeight: sData.rowHeight!=null?sData.rowHeight:null, headerWidth: sData.headerWidth!=null?sData.headerWidth:null
       };
+      if(songIsVideo){
+        song.isVideo = true;
+        try{ song.videoUrl = URL.createObjectURL(blob); }catch(e){}
+      }
       songs.push(song);
       await decodeAudio(song);
       song.playOffset = getTrim(song).trimStart;
