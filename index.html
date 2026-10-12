@@ -3344,7 +3344,12 @@
     });
     window.addEventListener('dragleave', (e)=>{
       dragDepth = Math.max(0, dragDepth-1);
-      if(dragDepth===0) overlay.classList.remove('active');
+      if(dragDepth===0){
+        overlay.classList.remove('active');
+        // Left the window entirely — a later drop on empty space should append
+        // rather than reuse a row the pointer passed over on the way out.
+        fileDropTarget = null;
+      }
     });
     window.addEventListener('drop', async (e)=>{
       if(!isFileDrag(e)) return;
@@ -3389,7 +3394,25 @@
 
       const mediaFiles = files.filter(f=> f.type.startsWith('audio/') || f.type.startsWith('video/') || /\.(mp3|wav|m4a|aac|ogg|flac|aiff|wma|mp4|mov|webm|mkv|m4v)$/i.test(f.name));
       const skipped = files.length - mediaFiles.length;
-      mediaFiles.forEach(f=> addSongFile(f, true));
+
+      // Drop position. Files dropped onto a row go in at that row rather than
+      // at the bottom, and take its group so the list render keeps them
+      // where they were put. Dropping on empty space still appends.
+      const target = fileDropTarget;
+      fileDropTarget = null;
+      let insertAt = null, insertGroupId = null;
+      if(target){
+        const idx = songs.findIndex(s=>s.id===target.songId);
+        if(idx !== -1){
+          insertAt = idx + (target.before ? 0 : 1);
+          insertGroupId = songs[idx].groupId || null;
+        }
+      }
+      mediaFiles.forEach(f=>{
+        addSongFile(f, true, insertAt==null ? null : { index: insertAt, groupId: insertGroupId });
+        if(insertAt != null) insertAt++;   // keep a multi-file drop in the order it was dropped
+      });
+
       if(mediaFiles.length===0 && files.length>0){
         showToast('No supported audio or video files found in what was dropped.');
       } else if(skipped>0){
@@ -3398,11 +3421,16 @@
     });
   })();
 
+  // Set while a file drag hovers a song row, so the window-level drop handler
+  // knows where in the list the import belongs. Cleared on every drop and
+  // whenever the drag leaves the window.
+  let fileDropTarget = null;
+
   function isVideoFile(file){
     if(file.type && file.type.startsWith('video/')) return true;
     return /\.(mp4|mov|webm|mkv|m4v)$/i.test(file.name||'');
   }
-  function addSongFile(file, autoAddToTimeline){
+  function addSongFile(file, autoAddToTimeline, placement){
     const fileIsVideo = isVideoFile(file);
     const song = {
       id: uid(), name: file.name, file,
@@ -3421,9 +3449,25 @@
       // below exactly like any other song.
       try{ song.videoUrl = URL.createObjectURL(file); }catch(e){}
     }
-    songs.push(song);
+    // A file dropped onto a particular row lands there; everything else is
+    // appended, which is what every other import path wants.
+    if(placement && typeof placement.index === 'number'){
+      song.groupId = placement.groupId || null;
+      songs.splice(Math.max(0, Math.min(placement.index, songs.length)), 0, song);
+    } else {
+      songs.push(song);
+    }
     if(autoAddToTimeline){
-      if(!tracks.includes(song.id)) tracks.push(song.id);
+      if(!tracks.includes(song.id)){
+        // Mirror the list position on the timeline so the two never disagree.
+        let at = tracks.length;
+        if(placement && typeof placement.index === 'number'){
+          const neighbour = songs[songs.indexOf(song) + 1];
+          const ni = neighbour ? tracks.indexOf(neighbour.id) : -1;
+          if(ni !== -1) at = ni;
+        }
+        tracks.splice(at, 0, song.id);
+      }
       if(!activeTrackId) activeTrackId = song.id;
     }
     renderSongList();
@@ -3911,6 +3955,10 @@
       const before = (e.clientY - rect.top) < rect.height/2;
       songList.querySelectorAll('.song-item').forEach(r=>r.classList.remove('drop-above','drop-below'));
       item.classList.add(before ? 'drop-above' : 'drop-below');
+      // Remember where a dragged-in FILE should land. The window-level drop
+      // handler does the importing, and by the time it runs the row under the
+      // pointer is no longer knowable, so it is captured here.
+      if(isFileDrag(e)) fileDropTarget = { songId: s.id, before };
     });
     item.addEventListener('drop', (e)=>{
       e.preventDefault();
