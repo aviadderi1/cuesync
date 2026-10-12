@@ -1347,6 +1347,8 @@ ipcMain.on('video-set-settings', (event, st) => {
     resolution: ['native', '2160p', '1080p', '720p'].includes(st && st.resolution) ? st.resolution : 'native'
   };
   writeVideoSettings(clean);
+  // The chosen output display may have changed, so the blackout follows it.
+  syncBlackoutWindow();
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('video-settings', clean);
   // Re-apply scaling to anything already on screen.
   videoOutputWindows.forEach((win) => {
@@ -1355,9 +1357,64 @@ ipcMain.on('video-set-settings', (event, st) => {
 });
 // Tell the renderer whenever displays are plugged in or removed.
 function notifyDisplayChange() {
+  syncBlackoutWindow();
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('video-displays-changed', { displays: listDisplays() });
   }
+}
+
+// ---------- Output blackout ----------
+// An external screen plugged into a show machine must never show the desktop.
+// This holds a plain black fullscreen window on the output display from the
+// moment it is connected, so the audience sees black until a video is
+// projected on top of it, and black again afterwards.
+let blackoutWindow = null;
+let blackoutDisplayId = null;
+
+function destroyBlackoutWindow() {
+  try { if (blackoutWindow && !blackoutWindow.isDestroyed()) blackoutWindow.destroy(); } catch (e) {}
+  blackoutWindow = null;
+  blackoutDisplayId = null;
+}
+
+function syncBlackoutWindow() {
+  let primary, target;
+  try {
+    primary = screen.getPrimaryDisplay();
+    target = resolveOutputDisplay();
+  } catch (e) { return; }
+
+  // Never black out the operator's own screen: on a single-monitor machine
+  // the output display IS the primary, and covering it would hide the app.
+  const wanted = (target && primary && target.id !== primary.id) ? target : null;
+  if (!wanted) { destroyBlackoutWindow(); return; }
+  if (blackoutWindow && !blackoutWindow.isDestroyed() && blackoutDisplayId === wanted.id) return;
+
+  destroyBlackoutWindow();
+  try {
+    const b = wanted.bounds;
+    const win = new BrowserWindow({
+      x: b.x, y: b.y, width: b.width, height: b.height,
+      show: false, frame: false, fullscreen: true, backgroundColor: '#000000',
+      skipTaskbar: true, autoHideMenuBar: true,
+      // Focusable would let the blackout steal keyboard focus from the
+      // operator mid-show; it is a backdrop, not a window to work in.
+      focusable: false, closable: false,
+      webPreferences: { contextIsolation: true, nodeIntegration: false }
+    });
+    win.setMenu(null);
+    win.setMenuBarVisibility(false);
+    win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(
+      '<html><body style="margin:0;background:#000;width:100vw;height:100vh;overflow:hidden"></body></html>'));
+    win.once('ready-to-show', () => {
+      if (win.isDestroyed()) return;
+      win.setFullScreen(true);
+      win.showInactive();
+    });
+    win.on('closed', () => { if (blackoutWindow === win) { blackoutWindow = null; blackoutDisplayId = null; } });
+    blackoutWindow = win;
+    blackoutDisplayId = wanted.id;
+  } catch (e) { destroyBlackoutWindow(); }
 }
 
 function videoScalingJs(st) {
@@ -1454,6 +1511,7 @@ function closeAllVideoWindows() {
     });
     map.clear();
   });
+  destroyBlackoutWindow();
 }
 ipcMain.on('close-all-video-windows', closeAllVideoWindows);
 ipcMain.handle('video-has-second-display', () => !!resolveOutputDisplay());
@@ -1612,6 +1670,9 @@ ipcMain.on('sync-video-preview', (event, payload) => {
 app.whenReady().then(async () => {
   screen.on('display-added', notifyDisplayChange);
   screen.on('display-removed', notifyDisplayChange);
+  // A screen already connected at launch gets blacked out too, not only one
+  // plugged in later.
+  syncBlackoutWindow();
 
   if (!license.hasValidLicense()) {
     const activated = await createLicenseGateWindow();
