@@ -3344,12 +3344,7 @@
     });
     window.addEventListener('dragleave', (e)=>{
       dragDepth = Math.max(0, dragDepth-1);
-      if(dragDepth===0){
-        overlay.classList.remove('active');
-        // Left the window entirely — a later drop on empty space should append
-        // rather than reuse a row the pointer passed over on the way out.
-        fileDropTarget = null;
-      }
+      if(dragDepth===0) overlay.classList.remove('active');
     });
     window.addEventListener('drop', async (e)=>{
       if(!isFileDrag(e)) return;
@@ -3395,16 +3390,26 @@
       const mediaFiles = files.filter(f=> f.type.startsWith('audio/') || f.type.startsWith('video/') || /\.(mp3|wav|m4a|aac|ogg|flac|aiff|wma|mp4|mov|webm|mkv|m4v)$/i.test(f.name));
       const skipped = files.length - mediaFiles.length;
 
-      // Drop position. Files dropped onto a row go in at that row rather than
-      // at the bottom, and take its group so the list render keeps them
-      // where they were put. Dropping on empty space still appends.
-      const target = fileDropTarget;
-      fileDropTarget = null;
+      // Drop position, taken from where the pointer actually was. Hover
+      // bookkeeping during dragover is unreliable for file drags — the same
+      // reason dragenter/dragover above refuse to gate on isFileDrag — so the
+      // row is resolved here, at drop time, from the drop coordinates. The
+      // overlay has just been deactivated, and is ignored for hit-testing
+      // regardless, so it cannot swallow the lookup.
       let insertAt = null, insertGroupId = null;
-      if(target){
-        const idx = songs.findIndex(s=>s.id===target.songId);
+      const prevPE = overlay.style.pointerEvents;
+      overlay.style.pointerEvents = 'none';
+      let hit = null;
+      try{ hit = document.elementFromPoint(e.clientX, e.clientY); }catch(err){ hit = null; }
+      overlay.style.pointerEvents = prevPE;
+      const row = hit && hit.closest ? hit.closest('.song-item') : null;
+      if(row){
+        const dropId = row.getAttribute('data-song-id');
+        const idx = songs.findIndex(s=>s.id===dropId);
         if(idx !== -1){
-          insertAt = idx + (target.before ? 0 : 1);
+          const rect = row.getBoundingClientRect();
+          const before = (e.clientY - rect.top) < rect.height/2;
+          insertAt = idx + (before ? 0 : 1);
           insertGroupId = songs[idx].groupId || null;
         }
       }
@@ -3420,11 +3425,6 @@
       }
     });
   })();
-
-  // Set while a file drag hovers a song row, so the window-level drop handler
-  // knows where in the list the import belongs. Cleared on every drop and
-  // whenever the drag leaves the window.
-  let fileDropTarget = null;
 
   function isVideoFile(file){
     if(file.type && file.type.startsWith('video/')) return true;
@@ -3955,10 +3955,6 @@
       const before = (e.clientY - rect.top) < rect.height/2;
       songList.querySelectorAll('.song-item').forEach(r=>r.classList.remove('drop-above','drop-below'));
       item.classList.add(before ? 'drop-above' : 'drop-below');
-      // Remember where a dragged-in FILE should land. The window-level drop
-      // handler does the importing, and by the time it runs the row under the
-      // pointer is no longer knowable, so it is captured here.
-      if(isFileDrag(e)) fileDropTarget = { songId: s.id, before };
     });
     item.addEventListener('drop', (e)=>{
       e.preventDefault();
